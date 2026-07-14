@@ -14,29 +14,19 @@
 sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile 2>/dev/null || true
 
 mkdir -p files/etc/uci-defaults
-cat > files/etc/uci-defaults/99-fix-wwan-proto <<'EOF'
+
+cat > files/etc/uci-defaults/99-fix-luci-cbi-format <<'EOF'
 #!/bin/sh
 
-# 修复新版 LuCI 不支持 proto 'wwan' 的问题
-# 接口名可以继续叫 wwan，但协议应为 dhcp
-
-if uci -q get network.wwan >/dev/null; then
-    uci set network.wwan.proto='dhcp'
-    uci commit network
-fi
-
-# 兼容某些配置里出现 modem 接口且 proto 被写成 wwan 的情况
-if uci -q get network.modem >/dev/null; then
-    [ "$(uci -q get network.modem.proto)" = "wwan" ] && {
-        uci set network.modem.proto='dhcp'
-        uci commit network
-    }
+if [ -f /www/luci-static/resources/cbi.js ]; then
+    sed -i "s/subst = subst.toString();/subst = (subst == null) ? '' : subst.toString();/g" \
+        /www/luci-static/resources/cbi.js
 fi
 
 exit 0
-
 EOF
-chmod +x files/etc/uci-defaults/99-fix-wwan-proto
+
+chmod +x files/etc/uci-defaults/99-fix-luci-cbi-format
 
 
 # 启用 IPv4 策略路由（直接写入内核 platform config，绕过 make defconfig 的依赖检查）
