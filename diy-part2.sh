@@ -50,7 +50,20 @@ EOF
 
 chmod +x files/etc/uci-defaults/99-fix-29-ports
 
+for cfg in target/linux/msm89xx/config-*; do
+  [ -f "$cfg" ] || continue
 
+  sed -i '/CONFIG_IP_ADVANCED_ROUTER/d' "$cfg"
+  sed -i '/CONFIG_IP_MULTIPLE_TABLES/d' "$cfg"
+  sed -i '/CONFIG_IPV6_MULTIPLE_TABLES/d' "$cfg"
+
+  echo 'CONFIG_IP_ADVANCED_ROUTER=y' >> "$cfg"
+  echo 'CONFIG_IP_MULTIPLE_TABLES=y' >> "$cfg"
+  echo 'CONFIG_IPV6_MULTIPLE_TABLES=y' >> "$cfg"
+done
+
+echo "Check msm89xx kernel routing config:"
+grep -R "CONFIG_IP_ADVANCED_ROUTER\|CONFIG_IP_MULTIPLE_TABLES\|CONFIG_IPV6_MULTIPLE_TABLES" target/linux/msm89xx/config-* || true
 
 # 启用 IPv4 策略路由（直接写入内核 platform config，绕过 make defconfig 的依赖检查）
 # CONFIG_KERNEL_IP_ADVANCED_ROUTER 在 OpenWrt Config.in 中无对应 wrapper，必须用此方式
