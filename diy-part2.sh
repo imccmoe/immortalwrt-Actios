@@ -13,20 +13,43 @@
 # 修改默认主题为 argon（路径不存在时跳过，不中断编译）
 sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile 2>/dev/null || true
 
+# 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
 mkdir -p files/etc/uci-defaults
 
-cat > files/etc/uci-defaults/99-fix-luci-cbi-format <<'EOF'
+cat > files/etc/uci-defaults/99-fix-29-ports <<'EOF'
 #!/bin/sh
 
-if [ -f /www/luci-static/resources/cbi.js ]; then
-    sed -i "s/subst = subst.toString();/subst = (subst == null) ? '' : subst.toString();/g" \
-        /www/luci-static/resources/cbi.js
+PORTS_JS="/www/luci-static/resources/view/status/include/29_ports.js"
+
+if [ -f "$PORTS_JS" ] && ! grep -q "_format_before_29_ports_fix" "$PORTS_JS"; then
+    cp "$PORTS_JS" "$PORTS_JS.orig"
+
+    cat > /tmp/ports_patch.js <<'EOP'
+(function() {
+	if (!String.prototype._format_before_29_ports_fix) {
+		String.prototype._format_before_29_ports_fix = String.prototype.format;
+
+		String.prototype.format = function() {
+			for (var i = 0; i < arguments.length; i++) {
+				if (arguments[i] == null)
+					arguments[i] = 0;
+			}
+
+			return String.prototype._format_before_29_ports_fix.apply(this, arguments);
+		};
+	}
+})();
+EOP
+
+    cat /tmp/ports_patch.js "$PORTS_JS.orig" > "$PORTS_JS"
+    rm -f /tmp/ports_patch.js
 fi
 
 exit 0
 EOF
 
-chmod +x files/etc/uci-defaults/99-fix-luci-cbi-format
+chmod +x files/etc/uci-defaults/99-fix-29-ports
+
 
 
 # 启用 IPv4 策略路由（直接写入内核 platform config，绕过 make defconfig 的依赖检查）
