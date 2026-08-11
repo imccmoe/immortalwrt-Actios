@@ -40,4 +40,9 @@ sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES +
 # 上游 config-* 已默认开启 CPU_FREQ/CPUFREQ_DT/SCHEDUTIL/CPU_FREQ_THERMAL（=y），无需改动；
 # 发热控制靠 luci-app-cpufreq 限频（用户态），过热自动降频由 tsens+cooling-maps 内建生效
 
+# ===== 降低过热保护阈值（msm8916 长期高温会断电，提前降频保护）=====
+# 原阈值：75°C 开始降频 / 110°C 强制关机 → 改为 60°C 降频 / 95°C 关机
+sed -i 's/temperature = <75000>;/temperature = <60000>;/g' target/linux/msm89xx/dts/msm8916.dtsi
+sed -i 's/temperature = <110000>;/temperature = <95000>;/g' target/linux/msm89xx/dts/msm8916.dtsi
+
 
