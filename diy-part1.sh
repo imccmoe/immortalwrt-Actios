@@ -36,4 +36,8 @@ sed -i 's/ qcom-msm8916-modem-[^ ]*//g' target/linux/msm89xx/image/msm8916.mk
 # 目标默认包：只加 DHCPv6 客户端，不加 odhcpd（随身WiFi不需要向客户端下发IPv6）
 sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES += odhcp6c' target/linux/msm89xx/Makefile
 
+# ===== CPU 调频说明 =====
+# 上游 config-* 已默认开启 CPU_FREQ/CPUFREQ_DT/SCHEDUTIL/CPU_FREQ_THERMAL（=y），无需改动；
+# 发热控制靠 luci-app-cpufreq 限频（用户态），过热自动降频由 tsens+cooling-maps 内建生效
+
 

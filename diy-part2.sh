@@ -10,8 +10,25 @@
 #sed -i 's/192.168.1.1/192.168.100.1/g' package/base-files/files/bin/config_generate
 
 
-# 修改默认主题为 argon（路径不存在时跳过，不中断编译）
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile 2>/dev/null || true
+# 修改默认主题为 argon（显式在 config/*.config 中启用 luci-theme-argon，此处只做首启兜底）
+# 注意：当前 luci 合集的 Makefile 不直接依赖 luci-theme-bootstrap，旧的 sed 替换已失效，勿恢复
+mkdir -p files/etc/uci-defaults
+
+# 首启强制默认主题为 argon（仅当 argon 已安装时生效；bootstrap 保留可切换）
+# 同时兜底注册主题到 luci.themes，避免 argon 自带 uci-defaults 未执行导致下拉框为空
+cat > files/etc/uci-defaults/99-argon-default <<'EOF'
+#!/bin/sh
+
+if [ -d "/www/luci-static/argon" ]; then
+	uci -q get luci.themes.Argon >/dev/null 2>&1 || uci -q set luci.themes.Argon='/luci-static/argon'
+	uci -q set luci.main.mediaurlbase='/luci-static/argon'
+	uci -q commit luci
+fi
+
+exit 0
+EOF
+
+chmod +x files/etc/uci-defaults/99-argon-default
 
 # 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
 mkdir -p files/etc/uci-defaults
@@ -87,3 +104,16 @@ sed -i 's/ +qmi-modem-410-init//' feeds/openstick/utils/openstick-tweaks/Makefil
 sed -i 's/ +PACKAGE_luci:luci-proto-modemmanager//' feeds/openstick/utils/openstick-tweaks/Makefile
 # 其开机脚本不再创建 modem 接口与 wwan0 防火墙条目
 sed -i '/network\.modem/d; /wwan0/d' feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+
+
+# ===== argon 主题模板自愈 =====
+# luci 26.x 的 ucode 渲染器不支持旧语法（<% %>），且旧模板 import 'math' 需要 ucode-mod-math
+# 若 smpackage 拉到旧版 argon 模板，自动替换为 kenzok8 master 的最新模板
+ARGON_DIR="feeds/smpackage/luci-theme-argon/ucode/template/themes/argon"
+if [ -f "$ARGON_DIR/header.ut" ] && grep -qE "'math'|<%" "$ARGON_DIR/header.ut" 2>/dev/null; then
+  echo ">>> argon 模板过旧（旧语法或依赖 ucode-mod-math），拉取最新模板..."
+  for f in footer footer_login head_meta header header_login out_header_login sysauth; do
+    curl -fsSL "https://raw.githubusercontent.com/kenzok8/small-package/master/luci-theme-argon/ucode/template/themes/argon/$f.ut" \
+      -o "$ARGON_DIR/$f.ut" 2>/dev/null && echo "    更新 $f.ut" || echo "    跳过 $f.ut"
+  done
+fi
