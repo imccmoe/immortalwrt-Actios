@@ -25,4 +25,15 @@ echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.d
 # sed -i 's|src-git-full openstick https://github.com/lkiuyu/openstick-feeds.git|src-git-full openstick https://github.com/xuxin1955/openstick-feeds|g' feeds.conf.default
 
 
+# ===== 去除基带（内部 modem）相关 =====
+# 目标默认包：去掉基带内核驱动（rpmsg-wwan-ctrl / bam-dmux / qcom-rproc-modem）与 rmtfs
+sed -i '/DEFAULT_PACKAGES += kmod-rpmsg-wwan-ctrl kmod-bam-dmux kmod-qcom-rproc-modem/d' target/linux/msm89xx/Makefile
+sed -i '/DEFAULT_PACKAGES += rmtfs/d' target/linux/msm89xx/Makefile
+# 设备默认包：去掉基带固件（保留 wcnss WiFi 固件与 nv 校准）
+sed -i 's/ qcom-msm8916-modem-[^ ]*//g' target/linux/msm89xx/image/msm8916.mk
+
+# ===== 启用 IPv6（仅获取使用，不下发） =====
+# 目标默认包：只加 DHCPv6 客户端，不加 odhcpd（随身WiFi不需要向客户端下发IPv6）
+sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES += odhcp6c' target/linux/msm89xx/Makefile
+
 
