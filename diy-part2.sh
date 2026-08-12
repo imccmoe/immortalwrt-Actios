@@ -106,9 +106,23 @@ sed -i 's/ +PACKAGE_luci:luci-proto-modemmanager//' feeds/openstick/utils/openst
 sed -i '/network\.modem/d; /wwan0/d' feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
 
 
-# ===== argon 主题模板自愈 =====
+# ===== argon 主题：强制使用 jerrykuku 官方最新源码 =====
+# smpackage 是滚动源，编译时可能拉到旧版（如 2.4.3，模板依赖 ucode-mod-math 且不兼容 luci 26.x）
+# 直接整体替换为官方仓库（当前 2.4.6，新语法无 math 依赖），拉取失败则回退 smpackage 版本
+if [ -d feeds/smpackage/luci-theme-argon ]; then
+  mv feeds/smpackage/luci-theme-argon feeds/smpackage/luci-theme-argon.bak
+  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git feeds/smpackage/luci-theme-argon 2>/dev/null; then
+    echo ">>> argon 已替换为官方最新版: $(grep -m1 'PKG_VERSION' feeds/smpackage/luci-theme-argon/Makefile 2>/dev/null || echo '?')"
+    rm -rf feeds/smpackage/luci-theme-argon.bak
+  else
+    echo "!!! 官方 argon 拉取失败，回退 smpackage 版本"
+    mv feeds/smpackage/luci-theme-argon.bak feeds/smpackage/luci-theme-argon
+  fi
+fi
+
+# ===== argon 主题模板自愈（兜底）=====
 # luci 26.x 的 ucode 渲染器不支持旧语法（<% %>），且旧模板 import 'math' 需要 ucode-mod-math
-# 若 smpackage 拉到旧版 argon 模板，自动替换为 kenzok8 master 的最新模板
+# 若最终拉到的 argon 模板仍是旧版，自动替换为 kenzok8 master 的最新模板
 ARGON_DIR="feeds/smpackage/luci-theme-argon/ucode/template/themes/argon"
 if [ -f "$ARGON_DIR/header.ut" ] && grep -qE "'math'|<%" "$ARGON_DIR/header.ut" 2>/dev/null; then
   echo ">>> argon 模板过旧（旧语法或依赖 ucode-mod-math），拉取最新模板..."
