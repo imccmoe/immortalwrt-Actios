@@ -107,27 +107,42 @@ sed -i '/network\.modem/d; /wwan0/d' feeds/openstick/utils/openstick-tweaks/file
 
 
 # ===== argon 主题：强制使用 jerrykuku 官方最新源码 =====
-# smpackage 是滚动源，编译时可能拉到旧版（如 2.4.3，模板依赖 ucode-mod-math 且不兼容 luci 26.x）
-# 直接整体替换为官方仓库（当前 2.4.6，新语法无 math 依赖），拉取失败则回退 smpackage 版本
+# 实际编译使用的是 luci feed 自带的 luci-theme-argon（版本停在 2.4.3-r20250722，
+# feeds 同名冲突时 luci feed 优先于 smpackage），旧版模板依赖 ucode-mod-math 易出问题
+# 直接整体替换 luci feed 的包为官方仓库最新（当前 2.4.6），拉取失败则回退原版
+ARGON_SRC="feeds/luci/themes/luci-theme-argon"
+if [ -d "$ARGON_SRC" ]; then
+  mv "$ARGON_SRC" "$ARGON_SRC.bak"
+  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git "$ARGON_SRC"; then
+    echo ">>> argon 已替换为官方最新版: $(grep -m1 'PKG_VERSION' "$ARGON_SRC/Makefile" 2>/dev/null || echo '?')"
+    rm -rf "$ARGON_SRC.bak"
+  else
+    echo "!!! 官方 argon 拉取失败，回退 luci feed 版本（检查上方 git clone 报错）"
+    mv "$ARGON_SRC.bak" "$ARGON_SRC"
+  fi
+fi
+
+# 同步替换 smpackage 里的同名包（防止未来 feed 顺序变化导致旧版被编译）
 if [ -d feeds/smpackage/luci-theme-argon ]; then
   mv feeds/smpackage/luci-theme-argon feeds/smpackage/luci-theme-argon.bak
-  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git feeds/smpackage/luci-theme-argon 2>/dev/null; then
-    echo ">>> argon 已替换为官方最新版: $(grep -m1 'PKG_VERSION' feeds/smpackage/luci-theme-argon/Makefile 2>/dev/null || echo '?')"
+  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git feeds/smpackage/luci-theme-argon; then
+    echo ">>> smpackage 的 argon 已同步为官方最新版"
     rm -rf feeds/smpackage/luci-theme-argon.bak
   else
-    echo "!!! 官方 argon 拉取失败，回退 smpackage 版本"
+    echo "!!! smpackage argon 同步失败，保留原版（不影响，luci feed 优先级更高）"
     mv feeds/smpackage/luci-theme-argon.bak feeds/smpackage/luci-theme-argon
   fi
 fi
 
 # ===== argon 主题模板自愈（兜底）=====
 # luci 26.x 的 ucode 渲染器不支持旧语法（<% %>），且旧模板 import 'math' 需要 ucode-mod-math
-# 若最终拉到的 argon 模板仍是旧版，自动替换为 kenzok8 master 的最新模板
-ARGON_DIR="feeds/smpackage/luci-theme-argon/ucode/template/themes/argon"
-if [ -f "$ARGON_DIR/header.ut" ] && grep -qE "'math'|<%" "$ARGON_DIR/header.ut" 2>/dev/null; then
-  echo ">>> argon 模板过旧（旧语法或依赖 ucode-mod-math），拉取最新模板..."
-  for f in footer footer_login head_meta header header_login out_header_login sysauth; do
-    curl -fsSL "https://raw.githubusercontent.com/kenzok8/small-package/master/luci-theme-argon/ucode/template/themes/argon/$f.ut" \
-      -o "$ARGON_DIR/$f.ut" 2>/dev/null && echo "    更新 $f.ut" || echo "    跳过 $f.ut"
-  done
-fi
+# 若最终生效的 argon 模板仍是旧版，自动替换为 kenzok8 master 的最新模板
+for ARGON_DIR in feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon feeds/smpackage/luci-theme-argon/ucode/template/themes/argon; do
+  if [ -f "$ARGON_DIR/header.ut" ] && grep -qE "'math'|<%" "$ARGON_DIR/header.ut" 2>/dev/null; then
+    echo ">>> $ARGON_DIR 模板过旧（旧语法或依赖 ucode-mod-math），拉取最新模板..."
+    for f in footer footer_login head_meta header header_login out_header_login sysauth; do
+      curl -fsSL "https://raw.githubusercontent.com/kenzok8/small-package/master/luci-theme-argon/ucode/template/themes/argon/$f.ut" \
+        -o "$ARGON_DIR/$f.ut" 2>/dev/null && echo "    更新 $f.ut" || echo "    跳过 $f.ut"
+    done
+  fi
+done
