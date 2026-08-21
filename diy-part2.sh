@@ -104,6 +104,14 @@ sed -i 's/ +qmi-modem-410-init//' feeds/openstick/utils/openstick-tweaks/Makefil
 sed -i 's/ +PACKAGE_luci:luci-proto-modemmanager//' feeds/openstick/utils/openstick-tweaks/Makefile
 # 其开机脚本不再创建 modem 接口与 wwan0 防火墙条目
 sed -i '/network\.modem/d; /wwan0/d' feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+# 其开机脚本 DNS 上游换成国内可用公共 DNS（原 1.1.1.1/8.8.8.8/8.8.4.4 国内不可用，保留 223.5.5.5）
+sed -i "/server='1.1.1.1'/d; /server='8.8.8.8'/d; /server='8.8.4.4'/d" feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+sed -i "/server='223.5.5.5'/a uci add_list dhcp.@dnsmasq[0].server='119.29.29.29'" feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+sed -i "/server='223.5.5.5'/a uci add_list dhcp.@dnsmasq[0].server='114.114.114.114'" feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+# 脚本结尾的 apk del 在本系统（opkg）不存在会失败，导致 uci-defaults 认为脚本失败、每次重启重跑
+# 删除该行并强制 exit 0，让脚本只执行一次
+sed -i '/^apk del openstick-tweaks$/d' feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
+echo 'exit 0' >> feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
 
 
 # ===== argon 主题：强制使用 jerrykuku 官方最新源码 =====
