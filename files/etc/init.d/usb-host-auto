@@ -1,0 +1,38 @@
+#!/bin/sh /etc/rc.common
+# 开机自动判断 USB 角色：
+# 若 gadget 模式下未检测到主机（电脑）连接，自动切换为 host 模式，
+# 使 USB 口可直接插外接 4G 网卡 / U盘 等设备。
+# 手动切回 gadget（连电脑出 usb0 网卡）：
+#   uci set gc.config.mode=gadget && /etc/init.d/gc restart
+
+START=95
+
+start() {
+	# 后台延时，避免阻塞开机流程，等 USB 枚举稳定
+	( sleep 10
+		local mode state udc
+		udc=$(ls /sys/class/udc/ 2>/dev/null | head -n1)
+		[ -n "$udc" ] || return 0
+
+		mode=$(uci -q get gc.config.mode 2>/dev/null)
+		[ "$mode" = "gadget" ] || return 0
+
+		state=$(cat "/sys/class/udc/$udc/state" 2>/dev/null)
+		case "$state" in
+			configured|addressed)
+				# 已连接主机（电脑），保持 gadget 模式
+				return 0
+				;;
+		esac
+
+		# 未连接主机 → 切换 host 模式，可插外接 USB 设备
+		logger -t usb-auto "未检测到主机连接 (UDC=$udc state=$state)，自动切换 USB host 模式"
+		uci set gc.config.mode=host
+		uci commit gc
+		/etc/init.d/gc restart
+	) &
+}
+
+boot() {
+	start
+}

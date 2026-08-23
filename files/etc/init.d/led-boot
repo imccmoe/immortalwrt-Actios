@@ -1,0 +1,29 @@
+#!/bin/sh /etc/rc.common
+# LED 开机策略：
+#   第一次启动（刷机后）：LED 保持默认（亮），并写入标志
+#   之后每次启动：关闭所有 LED（写入 none trigger + brightness 0）
+# 恢复出厂 / 删除 /etc/.led_off_flag 后重新从"第一次"开始
+
+START=96
+
+FLAG_FILE=/etc/.led_off_flag
+
+start() {
+	if [ -f "$FLAG_FILE" ]; then
+		# 非首次启动：关闭所有 LED
+		for t in /sys/class/leds/*/trigger; do
+			[ -w "$t" ] && echo none > "$t" 2>/dev/null
+		done
+		for b in /sys/class/leds/*/brightness; do
+			[ -w "$b" ] && echo 0 > "$b" 2>/dev/null
+		done
+		logger -t led-boot "非首次启动，已关闭所有 LED"
+	else
+		# 首次启动：保持 LED 亮，写入标志
+		touch "$FLAG_FILE"
+	fi
+}
+
+boot() {
+	start
+}
