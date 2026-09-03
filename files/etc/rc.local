@@ -1,4 +1,9 @@
-#!/bin/sh
 # Put your custom commands here that should be executed once
 # the system init finished. By default this file does nothing.
+
+# 禁用 USB 自动休眠（autosuspend），防止外接 4G 网卡等设备挂起断流
+for p in /sys/bus/usb/devices/*/power/control; do
+	[ -w "$p" ] && echo on > "$p" 2>/dev/null
+done
+
 exit 0

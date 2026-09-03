@@ -67,6 +67,11 @@ EOF
 
 chmod +x files/etc/uci-defaults/99-fix-29-ports
 
+# USB host 自动切换服务脚本权限
+chmod +x files/etc/init.d/usb-host-auto 2>/dev/null || true
+# LED 开机策略服务脚本权限
+chmod +x files/etc/init.d/led-boot 2>/dev/null || true
+
 for cfg in target/linux/msm89xx/config-*; do
   [ -f "$cfg" ] || continue
 
