@@ -61,6 +61,20 @@ chmod +x files/etc/uci-defaults/99-fix-29-ports
 chmod +x files/etc/init.d/usb-host-auto 2>/dev/null || true
 # LED 开机策略服务脚本权限
 chmod +x files/etc/init.d/led-boot 2>/dev/null || true
+# rc.local 可执行权限（OpenWrt done 服务用 -x 检查后执行）
+chmod +x files/etc/rc.local 2>/dev/null || true
+
+# 首次启动时 enable 自定义 init 服务（files/ 拷入的脚本不会自动建 /etc/rc.d 链接）
+mkdir -p files/etc/uci-defaults
+cat > files/etc/uci-defaults/99-enable-custom-services <<'EOF'
+#!/bin/sh
+
+/etc/init.d/usb-host-auto enable 2>/dev/null
+/etc/init.d/led-boot enable 2>/dev/null
+
+exit 0
+EOF
+chmod +x files/etc/uci-defaults/99-enable-custom-services
 
 for cfg in target/linux/msm89xx/config-*; do
   [ -f "$cfg" ] || continue
