@@ -9,28 +9,18 @@
 # 修改默认IP地址
 #sed -i 's/192.168.1.1/192.168.100.1/g' package/base-files/files/bin/config_generate
 
-
-# 修改默认主题为 argon（显式在 config/*.config 中启用 luci-theme-argon，此处只做首启兜底）
-# 注意：当前 luci 合集的 Makefile 不直接依赖 luci-theme-bootstrap，旧的 sed 替换已失效，勿恢复
-mkdir -p files/etc/uci-defaults
-
-# 首启强制默认主题为 argon（仅当 argon 已安装时生效；bootstrap 保留可切换）
-# 同时兜底注册主题到 luci.themes，避免 argon 自带 uci-defaults 未执行导致下拉框为空
-cat > files/etc/uci-defaults/99-argon-default <<'EOF'
-#!/bin/sh
-
-if [ -d "/www/luci-static/argon" ]; then
-	uci -q get luci.themes.Argon >/dev/null 2>&1 || uci -q set luci.themes.Argon='/luci-static/argon'
-	uci -q set luci.main.mediaurlbase='/luci-static/argon'
-	uci -q commit luci
-fi
-
-exit 0
-EOF
-
-chmod +x files/etc/uci-defaults/99-argon-default
+# ===== 已移除的修复（上游已修复，勿恢复）=====
+# 1. argon 默认主题兜底（99-argon-default + luci.themes 注册）：
+#    luci feed 的 luci-theme-argon 已升级到 2.4.7-r20260824，自带
+#    root/etc/uci-defaults/30_luci-theme-argon（设置 mediaurlbase 与注册主题），
+#    与旧补丁功能完全一致
+# 2. argon 官方源强制替换（jerrykuku git clone 覆盖 luci/smpackage feed）：
+#    luci feed 版本已与 jerrykuku 官方同步（同为 2.4.7-r20260824），无需替换
+# 3. argon 模板自愈（旧语法 / import 'math' 检测与拉取）：
+#    2.4.7 模板已为新语法且无 math 依赖
 
 # 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
+# 注：上游 luci 尚未修复（29_ports.js 仍直接 .format(可能为 null 的值)），此修复保留
 mkdir -p files/etc/uci-defaults
 
 cat > files/etc/uci-defaults/99-fix-29-ports <<'EOF'
@@ -117,45 +107,3 @@ sed -i "/server='223.5.5.5'/a uci add_list dhcp.@dnsmasq[0].server='114.114.114.
 # 删除该行并强制 exit 0，让脚本只执行一次
 sed -i '/^apk del openstick-tweaks$/d' feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
 echo 'exit 0' >> feeds/openstick/utils/openstick-tweaks/files/openstick_tweak
-
-
-# ===== argon 主题：强制使用 jerrykuku 官方最新源码 =====
-# 实际编译使用的是 luci feed 自带的 luci-theme-argon（版本停在 2.4.3-r20250722，
-# feeds 同名冲突时 luci feed 优先于 smpackage），旧版模板依赖 ucode-mod-math 易出问题
-# 直接整体替换 luci feed 的包为官方仓库最新（当前 2.4.6），拉取失败则回退原版
-ARGON_SRC="feeds/luci/themes/luci-theme-argon"
-if [ -d "$ARGON_SRC" ]; then
-  mv "$ARGON_SRC" "$ARGON_SRC.bak"
-  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git "$ARGON_SRC"; then
-    echo ">>> argon 已替换为官方最新版: $(grep -m1 'PKG_VERSION' "$ARGON_SRC/Makefile" 2>/dev/null || echo '?')"
-    rm -rf "$ARGON_SRC.bak"
-  else
-    echo "!!! 官方 argon 拉取失败，回退 luci feed 版本（检查上方 git clone 报错）"
-    mv "$ARGON_SRC.bak" "$ARGON_SRC"
-  fi
-fi
-
-# 同步替换 smpackage 里的同名包（防止未来 feed 顺序变化导致旧版被编译）
-if [ -d feeds/smpackage/luci-theme-argon ]; then
-  mv feeds/smpackage/luci-theme-argon feeds/smpackage/luci-theme-argon.bak
-  if git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git feeds/smpackage/luci-theme-argon; then
-    echo ">>> smpackage 的 argon 已同步为官方最新版"
-    rm -rf feeds/smpackage/luci-theme-argon.bak
-  else
-    echo "!!! smpackage argon 同步失败，保留原版（不影响，luci feed 优先级更高）"
-    mv feeds/smpackage/luci-theme-argon.bak feeds/smpackage/luci-theme-argon
-  fi
-fi
-
-# ===== argon 主题模板自愈（兜底）=====
-# luci 26.x 的 ucode 渲染器不支持旧语法（<% %>），且旧模板 import 'math' 需要 ucode-mod-math
-# 若最终生效的 argon 模板仍是旧版，自动替换为 kenzok8 master 的最新模板
-for ARGON_DIR in feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon feeds/smpackage/luci-theme-argon/ucode/template/themes/argon; do
-  if [ -f "$ARGON_DIR/header.ut" ] && grep -qE "'math'|<%" "$ARGON_DIR/header.ut" 2>/dev/null; then
-    echo ">>> $ARGON_DIR 模板过旧（旧语法或依赖 ucode-mod-math），拉取最新模板..."
-    for f in footer footer_login head_meta header header_login out_header_login sysauth; do
-      curl -fsSL "https://raw.githubusercontent.com/kenzok8/small-package/master/luci-theme-argon/ucode/template/themes/argon/$f.ut" \
-        -o "$ARGON_DIR/$f.ut" 2>/dev/null && echo "    更新 $f.ut" || echo "    跳过 $f.ut"
-    done
-  fi
-done

@@ -36,6 +36,13 @@ sed -i 's/ qcom-msm8916-modem-[^ ]*//g' target/linux/msm89xx/image/msm8916.mk
 # 目标默认包：只加 DHCPv6 客户端，不加 odhcpd（随身WiFi不需要向客户端下发IPv6）
 sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES += odhcp6c' target/linux/msm89xx/Makefile
 
+# ===== CPU 频率表：覆盖为 10 档 OPP（200MHz ~ 1.4GHz）=====
+# 默认上游只有 4 档（最高 998MHz），此表恢复骁龙410完整频率档位，
+# 便于 cpufreq 分级调频 / luci-app-cpufreq 手动限频有更多选择
+mkdir -p target/linux/msm89xx/dts/
+cp -f "$GITHUB_WORKSPACE/scripts/dts/msm8916.dtsi" "target/linux/msm89xx/dts/msm8916.dtsi"
+echo ">>> CPU OPP 档位: $(grep -c 'opp-hz' target/linux/msm89xx/dts/msm8916.dtsi) <<<"
+
 # ===== CPU 调频说明 =====
 # 上游 config-* 已默认开启 CPU_FREQ/CPUFREQ_DT/SCHEDUTIL/CPU_FREQ_THERMAL（=y），无需改动；
 # 发热控制靠 luci-app-cpufreq 限频（用户态），过热自动降频由 tsens+cooling-maps 内建生效
