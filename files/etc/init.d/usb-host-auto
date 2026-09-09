@@ -1,62 +1,42 @@
 #!/bin/sh /etc/rc.common
-# 开机自动自适应 USB 角色（每次开机重新判断，参照 Actions-OpenWrt 主机模式方案）：
-#   检测到主机（电脑，UDC state=configured/addressed）→ 保持/切回 gadget（usb0 网卡模式）
-#   未检测到主机 → 直接切换 UDC role 为 host（可插 4G 网卡 / U盘 等）
-# 直接写 role sysfs，不重启 gc，configfs gadget 配置保留，切回时 usb0 自动恢复
-# 手动切换：
-#   uci set gc.config.mode=gadget && /etc/init.d/gc restart   # 电脑 usb0 网卡
-#   uci set gc.config.mode=host   && /etc/init.d/gc restart   # host 模式
-
-START=99
+START=98
+STOP=20
 USE_PROCD=1
-
-ROLE_PATH=/sys/class/udc/ci_hdrc.0/device/driver/ci_hdrc.0/role
-STATE_PATH=/sys/class/udc/ci_hdrc.0/state
-
-set_role() {
-	local role="$1"
-	[ -w "$ROLE_PATH" ] || return 1
-	local cur
-	cur=$(cat "$ROLE_PATH" 2>/dev/null)
-	[ "$cur" = "$role" ] && return 0
-	echo "$role" > "$ROLE_PATH" 2>/dev/null
-}
-
-auto_role() {
-	local state
-	sleep 15
-	[ -e "$ROLE_PATH" ] || exit 0
-
-	state=$(cat "$STATE_PATH" 2>/dev/null)
-
-	# 电脑可能引导较慢（尚未枚举 USB），10 秒后二次确认，减少误判
-	if [ "$state" != "configured" ] && [ "$state" != "addressed" ]; then
-		sleep 10
-		state=$(cat "$STATE_PATH" 2>/dev/null)
-	fi
-
-	case "$state" in
-		configured|addressed)
-			# 检测到主机（电脑），切回/保持 gadget 模式
-			set_role gadget
-			;;
-		*)
-			# 无主机连接 → host 模式
-			logger -t usb-auto "未检测到主机连接 (UDC state=$state)，切换 USB host 模式"
-			set_role host
-			;;
-	esac
-}
 
 start_service() {
 	procd_open_instance
 	procd_set_param command /bin/true
 	procd_close_instance
-	# 后台延迟判断，避免阻塞开机
-	auto_role &
+	detect &
 }
 
 stop_service() {
-	# 停止/重启前切回 gadget，方便连接电脑
-	set_role gadget
+	:
+}
+
+detect() {
+	local udc state i=0
+	sleep 2
+	logger -t usb-role "force gadget"
+	uci set gc.config.mode=gadget
+	uci commit gc
+	/etc/init.d/gc restart >/dev/null 2>&1
+	sleep 3
+	while [ $i -lt 6 ]; do
+		udc=$(ls /sys/class/udc/ 2>/dev/null | head -n1)
+		[ -n "$udc" ] || break
+		state=$(cat "/sys/class/udc/$udc/state" 2>/dev/null)
+		case "$state" in
+			configured|addressed)
+				logger -t usb-role "pc found state=$state, keep gadget"
+				return 0
+				;;
+		esac
+		i=$((i+1))
+		sleep 2
+	done
+	logger -t usb-role "no pc state=${state:-none}, switch host"
+	uci set gc.config.mode=host
+	uci commit gc
+	/etc/init.d/gc restart >/dev/null 2>&1
 }
