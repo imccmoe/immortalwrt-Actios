@@ -19,6 +19,21 @@
 # 3. argon 模板自愈（旧语法 / import 'math' 检测与拉取）：
 #    2.4.7 模板已为新语法且无 math 依赖
 
+# ===== 移除内置无线（WCN36xx/WCNSS）释放内存 =====
+# 设备 config 里显式打开了 wcn36xx/wcnss，这里关闭，
+# 配合 diy-part1 从 DEFAULT_PACKAGES / DEVICE_PACKAGES 中移除
+for sym in kmod-wcn36xx kmod-qcom-rproc-wcnss; do
+  sed -i "s/^CONFIG_PACKAGE_${sym}=y/# CONFIG_PACKAGE_${sym} is not set/" .config
+done
+# 关闭各机型 WCNSS 固件 / nv 及对应 DEFAULT_ 符号
+sed -i 's/^CONFIG_PACKAGE_\([A-Za-z0-9_-]*wcnss[A-Za-z0-9_-]*\)=y/# CONFIG_PACKAGE_\1 is not set/' .config
+sed -i 's/^CONFIG_DEFAULT_\([A-Za-z0-9_-]*wcnss[A-Za-z0-9_-]*\)=y/# CONFIG_DEFAULT_\1 is not set/' .config
+sed -i 's/^CONFIG_DEFAULT_kmod-wcn36xx=y/# CONFIG_DEFAULT_kmod-wcn36xx is not set/' .config
+
+# ===== 网络性能调优：确保 BBR 拥塞控制可用 =====
+sed -i 's/^# CONFIG_PACKAGE_kmod-tcp-bbr is not set$/CONFIG_PACKAGE_kmod-tcp-bbr=y/' .config
+grep -q '^CONFIG_PACKAGE_kmod-tcp-bbr=y' .config || echo 'CONFIG_PACKAGE_kmod-tcp-bbr=y' >> .config
+
 # 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
 # 注：上游 luci 尚未修复（29_ports.js 仍直接 .format(可能为 null 的值)），此修复保留
 mkdir -p files/etc/uci-defaults
@@ -90,6 +105,43 @@ done
 
 echo "Check msm89xx kernel routing config:"
 grep -R "CONFIG_IP_ADVANCED_ROUTER\|CONFIG_IP_MULTIPLE_TABLES\|CONFIG_IPV6_MULTIPLE_TABLES" target/linux/msm89xx/config-* || true
+
+# ===== 移除 ARMv8 Crypto Extensions（CE），只保留 NEON / bit-sliced 加速 =====
+# 参考稳定版固件：msm8916 不支持 ARM64_CE（CE 实现是给 msm8996/8998 等 SoC 用的），
+# 这里显式关闭所有 CE 实现，NEON / bit-sliced 实现保持开启
+for cfg in target/linux/msm89xx/config-*; do
+  [ -f "$cfg" ] || continue
+
+  for sym in \
+    CONFIG_CRYPTO_AES_ARM64_CE \
+    CONFIG_CRYPTO_AES_ARM64_CE_BLK \
+    CONFIG_CRYPTO_AES_ARM64_CE_CCM \
+    CONFIG_CRYPTO_GHASH_ARM64_CE \
+    CONFIG_CRYPTO_SHA1_ARM64_CE \
+    CONFIG_CRYPTO_SHA2_ARM64_CE \
+    CONFIG_CRYPTO_SHA512_ARM64_CE \
+    CONFIG_CRYPTO_SM3_ARM64_CE \
+    CONFIG_CRYPTO_SM4_ARM64_CE \
+    CONFIG_CRYPTO_SM4_ARM64_CE_BLK \
+    CONFIG_CRYPTO_SM4_ARM64_CE_CCM \
+    CONFIG_CRYPTO_SM4_ARM64_CE_GCM \
+    CONFIG_CRYPTO_CRCT10DIF_ARM64_CE ; do
+    sed -i "/^${sym}=/d" "$cfg"
+    if ! grep -q "^# ${sym} is not set" "$cfg"; then
+      echo "# ${sym} is not set" >> "$cfg"
+    fi
+  done
+
+  # 确保 NEON / bit-sliced 实现开启
+  for sym in CONFIG_CRYPTO_AES_ARM64_NEON_BLK CONFIG_CRYPTO_AES_ARM64_BS; do
+    sed -i "/^${sym}=/d" "$cfg"
+    sed -i "/^# ${sym} is not set/d" "$cfg"
+    echo "${sym}=y" >> "$cfg"
+  done
+done
+
+echo "Check msm89xx arm64 crypto (CE removed / NEON kept):"
+grep -R "ARM64_CE\|ARM64_NEON_BLK\|ARM64_BS" target/linux/msm89xx/config-* || true
 
 # 启用 IPv4 策略路由（直接写入内核 platform config，绕过 make defconfig 的依赖检查）
 # CONFIG_KERNEL_IP_ADVANCED_ROUTER 在 OpenWrt Config.in 中无对应 wrapper，必须用此方式

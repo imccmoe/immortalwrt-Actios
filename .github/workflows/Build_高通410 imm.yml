@@ -153,10 +153,6 @@ jobs:
         fi
         ln -sf /mnt/openwrt $GITHUB_WORKSPACE/openwrt
 
-
-    - name:  files
-      run: cp -r files openwrt/files
-
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default

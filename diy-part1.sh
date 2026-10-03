@@ -29,12 +29,26 @@ echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.d
 # 目标默认包：去掉基带内核驱动（rpmsg-wwan-ctrl / bam-dmux / qcom-rproc-modem）与 rmtfs
 sed -i '/DEFAULT_PACKAGES += kmod-rpmsg-wwan-ctrl kmod-bam-dmux kmod-qcom-rproc-modem/d' target/linux/msm89xx/Makefile
 sed -i '/DEFAULT_PACKAGES += rmtfs/d' target/linux/msm89xx/Makefile
-# 设备默认包：去掉基带固件（保留 wcnss WiFi 固件与 nv 校准）
+# 设备默认包：去掉基带固件
 sed -i 's/ qcom-msm8916-modem-[^ ]*//g' target/linux/msm89xx/image/msm8916.mk
 
 # ===== 启用 IPv6（仅获取使用，不下发） =====
 # 目标默认包：只加 DHCPv6 客户端，不加 odhcpd（随身WiFi不需要向客户端下发IPv6）
+# 注意：锚点在 wcn36xx 行上，必须在下面删除该行之前执行
 sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES += odhcp6c' target/linux/msm89xx/Makefile
+
+# ===== 移除内置无线（WCN36xx/WCNSS）释放内存 =====
+# 目标默认包：去掉内置 WiFi 驱动与 WCNSS remoteproc
+sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/d' target/linux/msm89xx/Makefile
+# 设备默认包：去掉 WCNSS 固件与 nv 校准（保留 wpad，供外接 USB 无线网卡使用）
+sed -i 's/ qcom-msm8916-openstick-[^ ]*-wcnss-firmware//g' target/linux/msm89xx/image/msm8916.mk
+sed -i 's/ qcom-msm8916-wcnss-openstick-[^ ]*-nv//g' target/linux/msm89xx/image/msm8916.mk
+
+# ===== 内核级省电关闭（参考稳定版固件做法）=====
+# 通过内核命令行全局禁用 USB 自动休眠与 CPU cpuidle 深度睡眠
+grep -q 'usbcore.autosuspend' target/linux/msm89xx/image/msm8916.mk || \
+  sed -i '/^\s*CMDLINE :=/ s/"$/ usbcore.autosuspend=-1 cpuidle.off=1"/' target/linux/msm89xx/image/msm8916.mk
+echo ">>> CMDLINE: $(grep 'CMDLINE :=' target/linux/msm89xx/image/msm8916.mk) <<<"
 
 # ===== CPU 频率表：覆盖为 6 档 OPP（200MHz ~ 1.152GHz）=====
 # 默认上游只有 4 档（最高 998MHz），此表增加 1094/1152MHz 档（高频超频档已移除），

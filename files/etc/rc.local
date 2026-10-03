@@ -7,4 +7,13 @@ for p in /sys/bus/usb/devices/*/power/control; do
 	[ -w "$p" ] && echo on > "$p" 2>/dev/null
 done
 
+# 应用网络性能调优（部分系统不自动读取 /etc/sysctl.d）
+modprobe tcp_bbr 2>/dev/null
+[ -f /etc/sysctl.d/99-network-tuning.conf ] && sysctl -p /etc/sysctl.d/99-network-tuning.conf 2>/dev/null
+
+# USB 中断绑定到 CPU2（降低单核负载/延迟，参考稳定版固件做法）
+for irq in $(awk -F: '/dwc3|xhci|ehci|usb/{gsub(/[^0-9]/,"",$1); print $1}' /proc/interrupts 2>/dev/null); do
+	[ -w "/proc/irq/$irq/smp_affinity" ] && echo 4 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+done
+
 exit 0
