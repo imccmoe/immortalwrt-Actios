@@ -350,7 +350,7 @@
 
 		CLUSTER_PD: power-domain-cluster {
 			#power-domain-cells = <0>;
-			domain-idle-states = <&CLUSTER_RET>, <&CLUSTER_PWRDN>;
+			domain-idle-states = <&CLUSTER_RET>;
 		};
 	};
 

@@ -44,10 +44,11 @@ sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/d' target/linux/msm8
 sed -i 's/ qcom-msm8916-openstick-[^ ]*-wcnss-firmware//g' target/linux/msm89xx/image/msm8916.mk
 sed -i 's/ qcom-msm8916-wcnss-openstick-[^ ]*-nv//g' target/linux/msm89xx/image/msm8916.mk
 
-# ===== 内核级省电关闭（参考稳定版固件做法）=====
-# 通过内核命令行全局禁用 USB 自动休眠与 CPU cpuidle 深度睡眠
+# ===== 禁用 USB 自动休眠 =====
+# 仅通过内核命令行全局禁用 USB 自动休眠；
+# CPU 深度睡眠改用 DTS 控制：去掉簇级 GDHS（CLUSTER_PWRDN），保留簇 retention 与 CPU 浅睡
 grep -q 'usbcore.autosuspend' target/linux/msm89xx/image/msm8916.mk || \
-  sed -i '/^\s*CMDLINE :=/ s/"$/ usbcore.autosuspend=-1 cpuidle.off=1"/' target/linux/msm89xx/image/msm8916.mk
+  sed -i '/^\s*CMDLINE :=/ s/"$/ usbcore.autosuspend=-1"/' target/linux/msm89xx/image/msm8916.mk
 echo ">>> CMDLINE: $(grep 'CMDLINE :=' target/linux/msm89xx/image/msm8916.mk) <<<"
 
 # ===== CPU 频率表：覆盖为 6 档 OPP（200MHz ~ 1.152GHz）=====
