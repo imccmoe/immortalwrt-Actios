@@ -34,6 +34,17 @@ sed -i 's/^CONFIG_DEFAULT_kmod-wcn36xx=y/# CONFIG_DEFAULT_kmod-wcn36xx is not se
 sed -i 's/^# CONFIG_PACKAGE_kmod-tcp-bbr is not set$/CONFIG_PACKAGE_kmod-tcp-bbr=y/' .config
 grep -q '^CONFIG_PACKAGE_kmod-tcp-bbr=y' .config || echo 'CONFIG_PACKAGE_kmod-tcp-bbr=y' >> .config
 
+# ===== 加入 Realtek RTL8152/8153/8156 USB 网卡驱动及其固件 =====
+# kmod-usb-net-rtl8152 会自动依赖 r8152-firmware，
+# 后者安装 /lib/firmware/rtl_nic/rtl8153*、rtl8156*（RTL8153/8156 官方固件），
+# 修复这些芯片不加载固件时的兼容性/稳定性问题
+for sym in CONFIG_PACKAGE_kmod-usb-net-rtl8152 CONFIG_PACKAGE_r8152-firmware; do
+  sed -i "s/^# ${sym} is not set$/${sym}=y/" .config
+  if ! grep -q "^${sym}=y" .config; then
+    echo "${sym}=y" >> .config
+  fi
+done
+
 # 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
 # 注：上游 luci 尚未修复（29_ports.js 仍直接 .format(可能为 null 的值)），此修复保留
 mkdir -p files/etc/uci-defaults
