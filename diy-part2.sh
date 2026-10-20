@@ -20,24 +20,29 @@
 #    2.4.7 模板已为新语法且无 math 依赖
 
 # ===== 移除内置无线（WCN36xx/WCNSS）释放内存 =====
-# 设备 config 里显式打开了 wcn36xx/wcnss，这里关闭，
-# 配合 diy-part1 从 DEFAULT_PACKAGES / DEVICE_PACKAGES 中移除
-for sym in kmod-wcn36xx kmod-qcom-rproc-wcnss; do
-  sed -i "s/^CONFIG_PACKAGE_${sym}=y/# CONFIG_PACKAGE_${sym} is not set/" .config
-done
-# 关闭各机型 WCNSS 固件 / nv 及对应 DEFAULT_ 符号
-sed -i 's/^CONFIG_PACKAGE_\([A-Za-z0-9_-]*wcnss[A-Za-z0-9_-]*\)=y/# CONFIG_PACKAGE_\1 is not set/' .config
-sed -i 's/^CONFIG_DEFAULT_\([A-Za-z0-9_-]*wcnss[A-Za-z0-9_-]*\)=y/# CONFIG_DEFAULT_\1 is not set/' .config
-sed -i 's/^CONFIG_DEFAULT_kmod-wcn36xx=y/# CONFIG_DEFAULT_kmod-wcn36xx is not set/' .config
+# 注意：这里【不能】再用 sed 改 .config。
+# 工作流顺序是 diy-part2.sh -> make defconfig，defconfig 会依据
+# config/<机型>.config 里的上一级符号（DEFAULT_/PACKAGE_ 原本都是 =y）
+# 以及 wcnss 固件包的依赖，把 kmod-wcn36xx / kmod-qcom-rproc-wcnss 拉回 =y，
+# 所以旧版的 sed 写法实际无效（固件里一直带着这两个驱动）。
+# 现在直接在 config/*.config 里写 "# ... is not set"（13 个机型已全部改好），
+# 以基准配置的形式存在，defconfig 便无法恢复。
+# 已处理符号：kmod-wcn36xx、kmod-qcom-rproc-wcnss、openstick-*-wcnss-firmware、
+#             wcnss-openstick-*-nv，以及基带残留 rmtfs、kmod-bam-dmux、
+#             kmod-qcom-rproc-modem、kmod-rpmsg-wwan-ctrl
+# diy-part1 仍负责从 target/linux/msm89xx 的 DEFAULT_PACKAGES / DEVICE_PACKAGES 摘除
 
 # ===== 网络性能调优：确保 BBR 拥塞控制可用 =====
 sed -i 's/^# CONFIG_PACKAGE_kmod-tcp-bbr is not set$/CONFIG_PACKAGE_kmod-tcp-bbr=y/' .config
 grep -q '^CONFIG_PACKAGE_kmod-tcp-bbr=y' .config || echo 'CONFIG_PACKAGE_kmod-tcp-bbr=y' >> .config
 
-# ===== 加入 Realtek RTL8152/8153/8156 USB 网卡驱动及其固件 =====
-# kmod-usb-net-rtl8152 会自动依赖 r8152-firmware，
-# 后者安装 /lib/firmware/rtl_nic/rtl8153*、rtl8156*（RTL8153/8156 官方固件），
-# 修复这些芯片不加载固件时的兼容性/稳定性问题
+# ===== Realtek RTL8152/8153/8156 USB 网卡驱动及其固件（兜底）=====
+# config/*.config 里已经写死 CONFIG_PACKAGE_kmod-usb-net-rtl8152=y 与
+# CONFIG_PACKAGE_r8152-firmware=y（13 个机型全部一致），正常情况下这里不会触发。
+# 保留这段只是为了：万一以后有人从 config 里误删、或某个机型的 config 漏写，
+# 构建仍然能带上这个驱动，不至于静默丢功能。
+# r8152-firmware 会装 /lib/firmware/rtl_nic/rtl8153*、rtl8156*，解决部分芯片
+# 不加载官方固件时的兼容性/稳定性问题。
 for sym in CONFIG_PACKAGE_kmod-usb-net-rtl8152 CONFIG_PACKAGE_r8152-firmware; do
   sed -i "s/^# ${sym} is not set$/${sym}=y/" .config
   if ! grep -q "^${sym}=y" .config; then
