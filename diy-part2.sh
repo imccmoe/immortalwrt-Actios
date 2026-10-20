@@ -36,14 +36,16 @@
 sed -i 's/^# CONFIG_PACKAGE_kmod-tcp-bbr is not set$/CONFIG_PACKAGE_kmod-tcp-bbr=y/' .config
 grep -q '^CONFIG_PACKAGE_kmod-tcp-bbr=y' .config || echo 'CONFIG_PACKAGE_kmod-tcp-bbr=y' >> .config
 
-# ===== Realtek RTL8152/8153/8156 USB 网卡驱动及其固件（兜底）=====
-# config/*.config 里已经写死 CONFIG_PACKAGE_kmod-usb-net-rtl8152=y 与
-# CONFIG_PACKAGE_r8152-firmware=y（13 个机型全部一致），正常情况下这里不会触发。
-# 保留这段只是为了：万一以后有人从 config 里误删、或某个机型的 config 漏写，
-# 构建仍然能带上这个驱动，不至于静默丢功能。
-# r8152-firmware 会装 /lib/firmware/rtl_nic/rtl8153*、rtl8156*，解决部分芯片
-# 不加载官方固件时的兼容性/稳定性问题。
-for sym in CONFIG_PACKAGE_kmod-usb-net-rtl8152 CONFIG_PACKAGE_r8152-firmware; do
+# ===== 只补 Realtek rtl_nic 固件，不额外开驱动包 =====
+# 背景：
+#   - RTL8153/RTL8153B 的驱动（r8152）已进主线内核，由 target 内核 config 提供，
+#     不需要再通过 CONFIG_PACKAGE_kmod-usb-net-rtl8152 拉一份模块。
+#   - 但 firmware patch（/lib/firmware/rtl_nic/rtl8153a-2.fw、rtl8153b-2.fw 等）
+#     没有随默认固件包进镜像，驱动启动时 request_firmware 会拿不到，
+#     所以只单独打开 r8152-firmware（纯数据包，无依赖）。
+# 注意：不要再把 kmod-usb-net-rtl8152 加回来 —— 它依赖 kmod-crypto-sha256，
+#       会把这两个包一起拖进构建，曾导致编译失败。
+for sym in CONFIG_PACKAGE_r8152-firmware; do
   sed -i "s/^# ${sym} is not set$/${sym}=y/" .config
   if ! grep -q "^${sym}=y" .config; then
     echo "${sym}=y" >> .config
