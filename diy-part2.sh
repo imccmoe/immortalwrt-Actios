@@ -52,6 +52,18 @@ for sym in CONFIG_PACKAGE_r8152-firmware; do
   fi
 done
 
+# ===== 修复 glib2 子包对 libffi 的构建顺序（新 package-pack 框架 .provides 竞态）=====
+# 现象：Package glib2-gobject is missing dependencies for the following libraries: libffi.so.8
+# 原因：glib2-gobject 依赖 +libffi，但它的 .provides 可能先于 libffi 的 .provides 生成，
+#       并行编译时会漏掉 libffi.so.8；且失败重跑会复用那份不完整的 .provides。
+# 处理：给 glib2 增加 target 构建依赖，强制 libffi 先完成打包；并确保 libffi 被选中。
+if [ -f feeds/packages/libs/glib2/Makefile ]; then
+  grep -q '^PKG_BUILD_DEPENDS:=.*libffi' feeds/packages/libs/glib2/Makefile || \
+    sed -i '/^HOST_BUILD_DEPENDS:=/a PKG_BUILD_DEPENDS:=libffi' feeds/packages/libs/glib2/Makefile
+fi
+sed -i 's/^# CONFIG_PACKAGE_libffi is not set$/CONFIG_PACKAGE_libffi=y/' .config
+grep -q '^CONFIG_PACKAGE_libffi=y' .config || echo 'CONFIG_PACKAGE_libffi=y' >> .config
+
 # 修复 LuCI 状态页 29_ports.js 因 undefined/null 统计值导致 cbi.js toString 报错
 # 注：上游 luci 尚未修复（29_ports.js 仍直接 .format(可能为 null 的值)），此修复保留
 mkdir -p files/etc/uci-defaults
