@@ -139,6 +139,13 @@ grep -R "CONFIG_IP_ADVANCED_ROUTER\|CONFIG_IP_MULTIPLE_TABLES\|CONFIG_IPV6_MULTI
 # ===== 移除 ARMv8 Crypto Extensions（CE），只保留 NEON / bit-sliced 加速 =====
 # 参考稳定版固件：msm8916 不支持 ARM64_CE（CE 实现是给 msm8996/8998 等 SoC 用的），
 # 这里显式关闭所有 CE 实现，NEON / bit-sliced 实现保持开启
+#
+# 6.13+ 内核变更（当前锁定的 6.18 适用）：
+#   CONFIG_CRYPTO_SHA1_ARM64_CE / SHA2_ARM64_CE / SHA512_ARM64_CE
+#   CONFIG_CRYPTO_CRCT10DIF_ARM64_CE
+# 这几个符号已被内核删除（合并进通用/库实现），对 6.18 追加 "# ... is not set"
+# 属于空操作（kconfig 会忽略未知符号），保留只是为了回退到 6.12 时仍然生效。
+# 其余 AES / SM3 / SM4 系列在 6.18 的内核 Kconfig 里仍存在，继续有效。
 for cfg in target/linux/msm89xx/config-*; do
   [ -f "$cfg" ] || continue
 

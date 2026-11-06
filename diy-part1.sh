@@ -44,6 +44,26 @@ sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/d' target/linux/msm8
 sed -i 's/ qcom-msm8916-openstick-[^ ]*-wcnss-firmware//g' target/linux/msm89xx/image/msm8916.mk
 sed -i 's/ qcom-msm8916-wcnss-openstick-[^ ]*-nv//g' target/linux/msm89xx/image/msm8916.mk
 
+# ===== 修复 6.18 下 kmod-nf-ipt / kmod-iptables 重复打包同一批 .ko =====
+# 现象：装 kmod-ipt-core / kmod-nft-compat 时报
+#   check_data_file_clashes: Package kmod-nf-ipt wants to install .../ip_tables.ko
+#   But that file is already provided by package * kmod-iptables
+# 原因：上游 6.13+ 新增 HIDDEN 包 kmod-iptables（DEPENDS:=@!LINUX_6_12）负责
+#   net/ipv4/netfilter/ip_tables.ko 与 net/netfilter/x_tables.ko；而 kmod-nf-ipt
+#   的 FILES 仍从 NF_IPT-m 展开，6.18 内核里 CONFIG_IP_NF_IPTABLES 与
+#   CONFIG_NETFILTER_XTABLES 仍是 =m，于是两个包同时声称拥有同一文件；
+#   又因 nf-ipt 带 DEPENDS:=+!LINUX_6_12:kmod-iptables，装 nf-ipt 必连带装
+#   kmod-iptables，冲突必然发生（默认镜像走 fw4/nft 不装 legacy iptables 才没暴露）。
+# 处理：非 6.12 时把 nf-ipt 的 FILES 置空，文件所有权归 kmod-iptables。
+#   6.12 仍保持原样（该版本没有 kmod-iptables 包）。
+sed -i 's|FILES:=$(foreach mod,$(NF_IPT-m),$(LINUX_DIR)/net/$(mod).ko)|FILES:=$(if $(CONFIG_LINUX_6_12),$(foreach mod,$(NF_IPT-m),$(LINUX_DIR)/net/$(mod).ko),)|' \
+  package/kernel/linux/modules/netfilter.mk
+if grep -q 'FILES:=\$(if \$(CONFIG_LINUX_6_12)' package/kernel/linux/modules/netfilter.mk; then
+  echo ">>> netfilter.mk: nf-ipt FILES 已按内核版本隔离（非 6.12 归 kmod-iptables）<<<"
+else
+  echo ">>> 警告: netfilter.mk 未命中，6.18 下 ip_tables.ko 仍可能冲突 <<<"
+fi
+
 # ===== 禁用 USB 自动休眠 =====
 # 仅通过内核命令行全局禁用 USB 自动休眠；
 # CPU 深度睡眠改用 DTS 控制：去掉簇级 GDHS（CLUSTER_PWRDN），保留簇 retention 与 CPU 浅睡
