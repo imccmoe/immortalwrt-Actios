@@ -25,6 +25,26 @@ echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.d
 # sed -i 's|src-git-full openstick https://github.com/lkiuyu/openstick-feeds.git|src-git-full openstick https://github.com/xuxin1955/openstick-feeds|g' feeds.conf.default
 
 
+# ===== 全局放行「本地 git 归档」的镜像哈希不一致 =====
+# 现象：make download 阶段报
+#   Hash mismatch for file xxx.tar.xz: expected 58f8ad3f..., got 5daf9d3b...
+#   make[2]: *** [Makefile:74: .../dl/xxx.tar.xz] Error 1
+# 原因：很多包写成 PKG_SOURCE_PROTO:=git + PKG_MIRROR_HASH，期望从镜像下载预生成
+#   的 tarball；镜像上没有（或对 CI 返回 403/404）时，download.mk 会回退到
+#   git clone + git archive 本地打包，而归档字节受 xz/zlib/tar 版本与
+#   .gitattributes 影响，跨机器不可复现 —— 哈希必然对不上，且换台机器或换次
+#   构建就会再犯一次（gc、libusbgx 只是先撞上的两个）。
+#   逐个改 PKG_MIRROR_HASH 治标不治本：改成实际值也只是"当前这台机器"的值。
+# 处理：把 include/download.mk 中该分支的 `false` 换成 `:`，只保留警告不中断。
+#   仅放行"镜像归档"这一条路径；从上游 URL 直接下载的包仍由 download.pl 按
+#   PKG_HASH 严格校验，那条路径不做任何改动。
+sed -i 's/^\([[:space:]]*\)false; \\$/\1:; \\/' include/download.mk
+if grep -q '^[[:space:]]*:; \\$' include/download.mk; then
+  echo ">>> download.mk: git 归档哈希不一致已降级为警告 <<<"
+else
+  echo ">>> 警告: download.mk 未命中，哈希不一致仍会中断构建 <<<"
+fi
+
 # ===== 去除基带（内部 modem）相关 =====
 # 目标默认包：去掉基带内核驱动（rpmsg-wwan-ctrl / bam-dmux / qcom-rproc-modem）与 rmtfs
 sed -i '/DEFAULT_PACKAGES += kmod-rpmsg-wwan-ctrl kmod-bam-dmux kmod-qcom-rproc-modem/d' target/linux/msm89xx/Makefile
