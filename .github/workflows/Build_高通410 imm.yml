@@ -49,6 +49,10 @@ on:
         default: ''
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.profile || 'default' }}
+  cancel-in-progress: true
+
 env:
   REPO_URL: https://github.com/${{ github.event.inputs.upstream }}
   REPO_BRANCH: master
@@ -238,19 +242,60 @@ jobs:
       if: ${{ inputs.ssh || contains(github.event.action, 'ssh') }}
       
       
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: /mnt/openwrt/.ccache
+        key: ccache-${{ github.run_id }}
+        restore-keys: |
+          ccache-
+
+    - name: Setup ccache
+      run: |
+        command -v ccache >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y ccache)
+        mkdir -p /mnt/openwrt/.ccache
+        export CCACHE_DIR=/mnt/openwrt/.ccache
+        echo "CCACHE_DIR=/mnt/openwrt/.ccache" >> "$GITHUB_ENV"
+        ccache -M 5G
+        ccache -o sloppiness=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines
+        ccache -o compiler_check=content
+        ccache -p | grep -E "cache_dir|max_size" || true
+
     - name: Config defconfig
       id: config
       run: |
        cd openwrt
        make defconfig
        
+    - name: Cache dl
+      id: cache-dl
+      uses: actions/cache@v4
+      with:
+        path: /mnt/openwrt/dl
+        key: dl-${{ runner.os }}-immortalwrt-${{ hashFiles('upstream_lock.txt', 'diy-part1.sh', 'diy-part2.sh') }}
+        restore-keys: |
+          dl-${{ runner.os }}-immortalwrt-
+
     - name: Download package
       id: package
       run: |
         cd openwrt
-        make download -j4 V=s
+        [ "${{ steps.cache-dl.outputs.cache-hit }}" = "true" ] && echo ">>> dl 缓存命中" || echo ">>> dl 缓存未命中，全量下载"
+        set +e
+        make download -j$(nproc) -k V=s > /tmp/dl.log 2>&1
+        DL_EXIT=$?
+        set -e
+        tail -30 /tmp/dl.log
+        if grep -qiE "Hash mismatch|Hash verification failed|No more mirrors|ERROR 404|Download failed" /tmp/dl.log; then
+          echo "::warning::下载阶段存在异常（不阻断，继续编译）："
+          grep -iE "Hash mismatch|Hash verification failed|No more mirrors|ERROR 404|Download failed" /tmp/dl.log | head -30
+        fi
+        if [ $DL_EXIT -ne 0 ]; then
+          echo "::warning::make download 退出码 $DL_EXIT，缺失的源码会在编译阶段暴露"
+        fi
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+        exit 0
 
     - name: 查看 openwrt 目录
       run: ls -la openwrt/
@@ -275,7 +320,17 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 V=s
+        grep -q '^CONFIG_CCACHE=y' .config && echo ">>> ccache: .config 已启用" || echo "::warning::CONFIG_CCACHE 未生效，本次编译不会使用 ccache"
+        command -v ccache >/dev/null && { echo "===== ccache BEFORE ====="; ccache --show-stats; } || true
+        set +e
+        make -j$(nproc)
+        BUILD_EXIT=$?
+        set -e
+        if [ $BUILD_EXIT -ne 0 ]; then
+          echo "⚠️ 并行编译失败，改用 -j8 V=s 重试以获取可读错误"
+          make -j8 V=s
+        fi
+        command -v ccache >/dev/null && { echo "===== ccache AFTER ====="; ccache --show-stats; } || true
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
