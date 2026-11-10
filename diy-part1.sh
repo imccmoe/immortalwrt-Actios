@@ -25,6 +25,22 @@ echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.d
 # sed -i 's|src-git-full openstick https://github.com/lkiuyu/openstick-feeds.git|src-git-full openstick https://github.com/xuxin1955/openstick-feeds|g' feeds.conf.default
 
 
+# ===== 让 CONFIG_CCACHE 真正生效 =====
+# config/Config-devel.in 里 CCACHE 的 prompt 带 "if DEVEL"，而本仓库 DEVEL=n，
+# 于是 CCACHE 成了"不可见符号"——kconfig 在 make defconfig 时会把不可见符号
+# 强制写回默认值 n，导致 13 份配置里的 CONFIG_CCACHE=y 被丢弃，
+# 日志表现为 "CONFIG_CCACHE 未生效，本次编译不会使用 ccache"。
+# 这里只去掉该 prompt 的 DEVEL 条件（不动 DEVEL 本身，也不动其它开发选项），
+# 让 .config 里的 CONFIG_CCACHE=y 能被 defconfig 保留。
+# CCACHE_DIR 的 prompt 是 "if CCACHE"，CCACHE 可见后它也会跟着可见，
+# 空值即回落到 $(TOPDIR)/.ccache（与 CI 缓存的 /mnt/openwrt/.ccache 一致）。
+sed -i 's|^\([[:space:]]*\)bool "Use ccache" if DEVEL[[:space:]]*$|\1bool "Use ccache"|' config/Config-devel.in
+if grep -q 'bool "Use ccache"$' config/Config-devel.in; then
+  echo ">>> Config-devel.in: CCACHE prompt 已解除 DEVEL 依赖 <<<"
+else
+  echo ">>> 警告: Config-devel.in 未命中，CONFIG_CCACHE 仍会被 defconfig 丢弃 <<<"
+fi
+
 # ===== 全局放行「本地 git 归档」的镜像哈希不一致 =====
 # 现象：make download 阶段报
 #   Hash mismatch for file xxx.tar.xz: expected 58f8ad3f..., got 5daf9d3b...
