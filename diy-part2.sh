@@ -9,6 +9,24 @@
 # 修改默认IP地址
 #sed -i 's/192.168.1.1/192.168.100.1/g' package/base-files/files/bin/config_generate
 
+# ===== 去掉 smpackage 里的 argon 主题副本（与 luci feed 的版本冲突）=====
+# smpackage 自带一份完整的 luci-theme-argon（3.1.3，含 compat/luci-app-argon-config），
+# 而 luci feed 的 luci-theme-argon（3.1.x）已经 PKG_PROVIDES:=luci-app-argon-config
+# 自带配置页。两套同名的包会：
+#   - 各自往 /www/luci-static/argon/ 写静态资源，后装的覆盖先装的 → 样式错乱；
+#   - 各有一份配置页与 /etc/config/argon 默认值 → 设置项行为不一致；
+#   - 构建日志里刷 "does not support ucode template precompilation" 等提示。
+# 只保留 luci feed 那份，删掉 feeds install 生成的 smpackage 软链（源仓库不动）。
+for p in package/feeds/smpackage/luci-theme-argon \
+         package/feeds/smpackage/luci-app-argon-config; do
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    rm -rf "$p"
+    echo ">>> 已移除 $p（保留 luci feed 的 luci-theme-argon）"
+  fi
+done
+echo ">>> 当前 argon 相关包目录："
+ls -d package/feeds/*/luci-theme-argon package/feeds/*/luci-app-argon-config 2>/dev/null || echo "    (无)"
+
 # ===== 已移除的修复（上游已修复，勿恢复）=====
 # 1. argon 默认主题兜底（99-argon-default + luci.themes 注册）：
 #    luci feed 的 luci-theme-argon 已升级到 2.4.7-r20260824，自带
