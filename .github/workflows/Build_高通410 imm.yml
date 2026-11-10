@@ -272,9 +272,22 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /mnt/openwrt/dl
-        key: dl-${{ runner.os }}-immortalwrt-${{ hashFiles('upstream_lock.txt', 'diy-part1.sh', 'diy-part2.sh') }}
+        key: dl-${{ runner.os }}-immortalwrt-v2-${{ hashFiles('upstream_lock.txt', 'diy-part1.sh', 'diy-part2.sh') }}
         restore-keys: |
-          dl-${{ runner.os }}-immortalwrt-
+          dl-${{ runner.os }}-immortalwrt-v2-
+
+    - name: Clean go module cache
+      run: |
+        # dl/go-mod-cache 会被 dl 缓存一并打包，但它在"编译被中断"时是半成品：
+        # 模块目录存在、内部文件缺失，表现为
+        #   no required module provides package .../xxx/internal/yyy
+        #   build constraints exclude all Go files in .../go-isatty@vX
+        # 且这些目录是只读的，go 无法自行修复，只能每次构建前删掉重下。
+        # （Go 模块体积不大，当前只有 yq 一个 Go 包，重下约几十秒）
+        if [ -d /mnt/openwrt/dl/go-mod-cache ]; then
+          echo ">>> 清理残留的 go-mod-cache（避免半成品模块缓存导致 Go 包秒挂）"
+          rm -rf /mnt/openwrt/dl/go-mod-cache
+        fi
 
     - name: Download package
       id: package
