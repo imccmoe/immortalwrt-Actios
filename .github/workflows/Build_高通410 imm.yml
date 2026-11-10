@@ -323,12 +323,23 @@ jobs:
         grep -q '^CONFIG_CCACHE=y' .config && echo ">>> ccache: .config 已启用" || echo "::warning::CONFIG_CCACHE 未生效，本次编译不会使用 ccache"
         command -v ccache >/dev/null && { echo "===== ccache BEFORE ====="; ccache --show-stats; } || true
         set +e
-        make -j$(nproc)
-        BUILD_EXIT=$?
+        make -j$(nproc) 2>&1 | tee /tmp/build.log
+        BUILD_EXIT=${PIPESTATUS[0]}
         set -e
         if [ $BUILD_EXIT -ne 0 ]; then
           echo "⚠️ 并行编译失败，改用 -j8 V=s 重试以获取可读错误"
-          make -j8 V=s
+          set +e
+          make -j8 V=s 2>&1 | tee /tmp/build-retry.log
+          RETRY_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ $RETRY_EXIT -ne 0 ]; then
+            echo "==================== 失败摘要（自动提取） ===================="
+            grep -nE "ERROR: package/|make\[[0-9]+\]: \*\*\*|undefined reference|^go: |cannot find|No rule to make target" /tmp/build-retry.log | tail -40
+            echo "==================== 并行轮失败包 ===================="
+            grep -nE "ERROR: package/|make\[[0-9]+\]: \*\*\*" /tmp/build.log | tail -20
+            echo "==================== 摘要结束 ===================="
+            exit $RETRY_EXIT
+          fi
         fi
         command -v ccache >/dev/null && { echo "===== ccache AFTER ====="; ccache --show-stats; } || true
         echo "status=success" >> $GITHUB_OUTPUT
