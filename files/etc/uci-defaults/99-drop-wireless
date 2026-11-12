@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# 本固件不含任何无线协议栈（wpad / mac80211 / cfg80211 均未选），
+# 但 sysupgrade 保留配置时会把旧固件的 /etc/config/wireless 带过来，
+# LuCI 依据 uci 里是否存在 @wifi-device 决定是否显示「无线」与
+# 「信道分析」菜单，于是菜单又冒出来了。
+#
+# 这里在首次启动时清掉残留配置；带无线的机型不受影响（有设备节点或
+# wpad 可执行文件时直接跳过）。
+
+[ -d /sys/class/ieee80211 ] && exit 0
+[ -x /usr/sbin/wpad ] && exit 0
+[ -f /etc/config/wireless ] && rm -f /etc/config/wireless
+exit 0
