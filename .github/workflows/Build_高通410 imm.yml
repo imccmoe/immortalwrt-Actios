@@ -4,7 +4,6 @@
 name: 🚀 Build_imm_高通410系列
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
@@ -57,7 +56,7 @@ env:
   REPO_URL: https://github.com/${{ github.event.inputs.upstream }}
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ${{ format('config/{0}.config', github.event.inputs.profile) }}
+  CONFIG_FILE: ${{ format('config/{0}.config', github.event.inputs.profile || 'ufi003') }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -396,7 +395,7 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        PROFILE=${{ github.event.inputs.profile }}
+        PROFILE=${{ github.event.inputs.profile || 'ufi003' }}
 
         # 创建刷机包目录并打包 zip
         mkdir -p flash_package
@@ -440,7 +439,7 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        PROFILE=${{ github.event.inputs.profile }}
+        PROFILE=${{ github.event.inputs.profile || 'ufi003' }}
         # 提取用户设置的 IP 和主机名
         RAW='${{ inputs.extra_packages }}'
         CUSTOM_IP=$(echo "$RAW" | grep -oP '(?<=__ip__)[^,\s]+' || true)

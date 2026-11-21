@@ -1,14 +1,25 @@
 #!/bin/sh
 #
-# 本固件不含任何无线协议栈（wpad / mac80211 / cfg80211 均未选），
-# 但 sysupgrade 保留配置时会把旧固件的 /etc/config/wireless 带过来，
-# LuCI 依据 uci 里是否存在 @wifi-device 决定是否显示「无线」与
-# 「信道分析」菜单，于是菜单又冒出来了。
+# 本固件默认不含无线协议栈（wpad / mac80211 / cfg80211 均未编译），
+# 但 /etc/config/wireless 仍会重新出现，来源有两个：
+#   1) /etc/init.d/boot 每次启动都会执行 `/sbin/wifi config`
+#      （`[ -f /etc/board.json ] && /sbin/wifi config`）；
+#   2) sysupgrade 保留配置时，会把旧固件的 /etc/config/wireless 带过来。
+# LuCI 依据 uci 里是否存在 @wifi-device 决定是否显示「无线」与「信道分析」
+# 菜单，于是在没有无线的机型上菜单又冒出来。
 #
-# 这里在首次启动时清掉残留配置；带无线的机型不受影响（有设备节点或
-# wpad 可执行文件时直接跳过）。
+# 只有存在真实无线设备（/sys/class/ieee80211 下有 phy*）时才跳过；
+# 空目录不算 —— cfg80211 注册 class 后目录就会存在，但里面没有 phy。
+# 需要外接 USB 无线网卡时，装好 wpad 与驱动后本脚本会自动放行。
 
-[ -d /sys/class/ieee80211 ] && exit 0
+HAVE_PHY=0
+if [ -d /sys/class/ieee80211 ]; then
+	for p in /sys/class/ieee80211/*; do
+		[ -e "$p" ] && HAVE_PHY=1 && break
+	done
+fi
+[ "$HAVE_PHY" = "1" ] && exit 0
 [ -x /usr/sbin/wpad ] && exit 0
+
 [ -f /etc/config/wireless ] && rm -f /etc/config/wireless
 exit 0

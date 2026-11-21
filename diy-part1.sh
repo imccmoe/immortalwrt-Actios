@@ -76,9 +76,15 @@ sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/a DEFAULT_PACKAGES +
 # ===== 移除内置无线（WCN36xx/WCNSS）释放内存 =====
 # 目标默认包：去掉内置 WiFi 驱动与 WCNSS remoteproc
 sed -i '/^DEFAULT_PACKAGES += kmod-wcn36xx kmod-rproc-wcnss/d' target/linux/msm89xx/Makefile
-# 设备默认包：去掉 WCNSS 固件与 nv 校准（保留 wpad，供外接 USB 无线网卡使用）
+# 设备默认包：去掉 WCNSS 固件、nv 校准与 wpad
+# 注意：wpad-basic-wolfssl 也写在每个机型的 DEVICE_PACKAGES 里，它是完整的
+# 无线协议栈（hostapd/wpa_supplicant），只把 PACKAGE_ 符号改成 not set 没用：
+# make defconfig 会按 DEVICE_PACKAGES 重新生成 CONFIG_DEFAULT_wpad-basic-wolfssl=y，
+# 连带把 wifi-scripts / hostapd-common / 无线菜单依赖拉回来，所以必须从源头删掉。
 sed -i 's/ qcom-msm8916-openstick-[^ ]*-wcnss-firmware//g' target/linux/msm89xx/image/msm8916.mk
 sed -i 's/ qcom-msm8916-wcnss-openstick-[^ ]*-nv//g' target/linux/msm89xx/image/msm8916.mk
+sed -i 's/ wpad-basic-wolfssl//g' target/linux/msm89xx/image/msm8916.mk
+echo ">>> 设备默认包中残留的无线项：$(grep -cE 'wpad|wcnss' target/linux/msm89xx/image/msm8916.mk || true) 处 <<<"
 
 # ===== 修复 6.18 下 kmod-nf-ipt / kmod-iptables 重复打包同一批 .ko =====
 # 现象：装 kmod-ipt-core / kmod-nft-compat 时报

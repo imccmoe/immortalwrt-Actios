@@ -124,6 +124,10 @@ chmod +x files/etc/uci-defaults/99-fix-29-ports
 chmod +x files/etc/init.d/usb-host-auto 2>/dev/null || true
 # LED 开机策略服务脚本权限
 chmod +x files/etc/init.d/led-boot 2>/dev/null || true
+# 无无线机型开机清理 wireless 的服务脚本权限
+chmod +x files/etc/init.d/drop-wireless 2>/dev/null || true
+# 首次启动清理 wireless 的 uci-defaults 权限
+chmod +x files/etc/uci-defaults/99-drop-wireless 2>/dev/null || true
 # rc.local 可执行权限（OpenWrt done 服务用 -x 检查后执行）
 chmod +x files/etc/rc.local 2>/dev/null || true
 
@@ -134,6 +138,7 @@ cat > files/etc/uci-defaults/99-enable-custom-services <<'EOF'
 
 /etc/init.d/usb-host-auto enable 2>/dev/null
 /etc/init.d/led-boot enable 2>/dev/null
+/etc/init.d/drop-wireless enable 2>/dev/null
 
 exit 0
 EOF

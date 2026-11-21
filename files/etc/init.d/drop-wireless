@@ -1,0 +1,23 @@
+#!/bin/sh /etc/rc.common
+# 无无线机型：每次开机清掉 /etc/config/wireless
+#
+# /etc/init.d/boot 每次启动都会执行 `/sbin/wifi config`，不清的话
+# wireless 配置和 LuCI 的「无线」菜单会在重启后重新出现。
+#
+# 有真实无线设备（/sys/class/ieee80211 下有 phy*）或装了 wpad 时不动，
+# 留给外接 USB 无线网卡使用。空目录不算设备。
+
+START=95
+
+start() {
+	for p in /sys/class/ieee80211/*; do
+		[ -e "$p" ] && return 0
+	done
+	[ -x /usr/sbin/wpad ] && return 0
+
+	[ -f /etc/config/wireless ] && rm -f /etc/config/wireless
+}
+
+boot() {
+	start
+}
